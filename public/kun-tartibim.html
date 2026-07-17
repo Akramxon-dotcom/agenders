@@ -2119,6 +2119,16 @@ function getBioClock(){
       var ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
       var app=document.getElementById('app'); if(app) app.style.display='block';
       if(typeof hydrate==='function') hydrate();
+      if(typeof applyTheme==='function') try{applyTheme();}catch(e){}
+      if(typeof applyAccent==='function') try{applyAccent();}catch(e){}
+      if(typeof updateTopbar==='function') try{updateTopbar();}catch(e){}
+      if(typeof renderSchedule==='function') try{renderSchedule();}catch(e){console.error(e);}
+      if(typeof renderPrayers==='function') try{renderPrayers();}catch(e){}
+      if(typeof fetchPrayers==='function') try{fetchPrayers();}catch(e){}
+      if(typeof renderStreak==='function') try{renderStreak();}catch(e){}
+      if(typeof renderWeatherCard==='function') try{renderWeatherCard();}catch(e){}
+      if(typeof fetchWeather==='function') try{fetchWeather();}catch(e){}
+      if(typeof updateClock==='function') try{updateClock();setInterval(updateClock,1000);}catch(e){}
       if(typeof initApp==='function') initApp();
     } catch(e){ console.error('boot error', e); }
   }
