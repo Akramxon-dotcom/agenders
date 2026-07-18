@@ -1116,13 +1116,12 @@ function enterApp(){
   initApp();
 }
 
-// Page visibility → show PIN on return
+// Page visibility → optionally lock on return (auto-lock setting)
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden) return;
+  if(!S.autoLockOnHide) return;
   if(document.getElementById('app').style.display==='block'){
-    document.getElementById('lockScreen').style.display='flex';
-    document.getElementById('app').style.display='none';
-    showPinLock();
+    lockNow();
   }
 });
 
