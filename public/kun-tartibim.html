@@ -681,6 +681,8 @@ body::before {
       <button class="ib" id="notifBtn" onclick="toggleNotifications()" title="Bildirishnomalar">🔕</button>
       <button class="ib" id="themeBtn" onclick="toggleTheme()">🌙</button>
       <button class="ib" onclick="refreshPrayer()" title="Namoz vaqtlarini yangilash">🔄</button>
+      <button class="ib" onclick="openSettings()" title="Sozlamalar">⚙️</button>
+      <button class="ib" onclick="lockNow()" title="Qulflash">🔒</button>
     </div>
   </div>
 
@@ -1076,14 +1078,14 @@ function shakeDots(id){
 
 function checkSecret(){
   const v=document.getElementById('secretInp').value.trim();
-  if(v===SECRET_CODE){
+  const expected = S.secretCode || SECRET_CODE;
+  if(v===expected){
     document.getElementById('secretErr').textContent='';
-    // show new pin setup
     S.pinSetupDone=false; persist();
     showPinSetup();
-    document.getElementById('lockSub').textContent='Yangi PIN kod o\'rnating';
+    document.getElementById('lockSub').textContent='Yangi PIN kod o\u2019rnating';
   } else {
-    document.getElementById('secretErr').textContent='Noto\'g\'ri maxfiy kod';
+    document.getElementById('secretErr').textContent='Noto\u2019g\u2019ri maxfiy kod';
   }
 }
 
@@ -1114,13 +1116,12 @@ function enterApp(){
   initApp();
 }
 
-// Page visibility → show PIN on return
+// Page visibility → optionally lock on return (auto-lock setting)
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden) return;
+  if(!S.autoLockOnHide) return;
   if(document.getElementById('app').style.display==='block'){
-    document.getElementById('lockScreen').style.display='flex';
-    document.getElementById('app').style.display='none';
-    showPinLock();
+    lockNow();
   }
 });
 
@@ -1597,10 +1598,13 @@ function showDayDetail(date){
 }
 
 function renderStreak(){
+  const row=document.getElementById('streakRow');
+  const num=document.getElementById('streakNum');
+  if(!row) return;
   const days=['Du','Se','Ch','Pa','Ju','Sh','Ya'];
   const today=new Date();
   const maxH=44;
-  document.getElementById('streakRow').innerHTML=days.map((d,i)=>{
+  row.innerHTML=days.map((d,i)=>{
     const dt=new Date(today);dt.setDate(today.getDate()-(6-i));
     const key=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
     const hist=S.dayHistory&&S.dayHistory[key];
@@ -1612,7 +1616,7 @@ function renderStreak(){
     const col=pct>=80?'var(--A)':pct>=50?'var(--amber)':pct>0?'rgba(239,68,68,.6)':'var(--bdr3)';
     return '<div class="streak-day"><div class="streak-bar-wrap" style="height:'+maxH+'px;display:flex;align-items:flex-end;margin-bottom:4px"><div style="width:100%;height:'+h+'px;background:'+col+';border-radius:4px 4px 0 0;transition:height .6s"></div></div><div class="streak-dl" style="'+(isToday?'color:var(--A);font-weight:700':'')+'">'+(isToday?'<b>'+d+'</b>':d)+'</div></div>';
   }).join('');
-  document.getElementById('streakNum').textContent=S.streak||0;
+  if(num) num.textContent=S.streak||0;
 }
 // ── MODAL ──
 function openOv(id){ document.getElementById(id).classList.add('open'); }
@@ -2111,33 +2115,365 @@ function getBioClock(){
 </script>
 
 <script>
-// AUTO-BYPASS LOGIN
+/* ══════════════════════════════════════════════════════
+   MISSING FUNCTION STUBS (referenced elsewhere)
+   ══════════════════════════════════════════════════════ */
+function updateClock(){
+  try{
+    const n=new Date();
+    const dow=['Yakshanba','Dushanba','Seshanba','Chorshanba','Payshanba','Juma','Shanba'][n.getDay()];
+    const el=document.getElementById('topDate');
+    if(el) el.textContent = dow+', '+n.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){}
+}
+function toggleTask(id){
+  const t=S.tasks.find(x=>x.id===id); if(!t) return;
+  t.done=!t.done;
+  if(!S.activityLog) S.activityLog=[];
+  S.activityLog.unshift({t:Date.now(),msg:(t.done?'✅ ':'↩️ ')+t.name});
+  S.activityLog=S.activityLog.slice(0,200);
+  persist(); renderSchedule(); updateProgress(); renderStreak && renderStreak();
+  if(typeof haptic==='function') haptic('light');
+}
+async function fetchPrayers(){
+  try{
+    const r=await fetch('https://api.aladhan.com/v1/timingsByCity?city=Margilan&country=Uzbekistan&method=2',{signal:AbortSignal.timeout(6000)});
+    const d=await r.json();
+    if(d && d.data && d.data.timings){
+      const T=d.data.timings;
+      const off=Number(S.prayerOffset||0);
+      const shift=(t)=>{ const [h,m]=t.split(':').map(Number); const total=h*60+m+off; const H=((total%1440)+1440)%1440; return String(Math.floor(H/60)).padStart(2,'0')+':'+String(H%60).padStart(2,'0'); };
+      S.prayers={fajr:shift(T.Fajr),dhuhr:shift(T.Dhuhr),asr:shift(T.Asr),maghrib:shift(T.Maghrib),isha:shift(T.Isha)};
+      persist(); renderPrayers && renderPrayers();
+    }
+  }catch(e){}
+}
+function openFocusMode(id){
+  const t = id ? S.tasks.find(x=>x.id===id) : S.tasks.find(x=>!x.done);
+  if(!t){ toast('Bajarilmagan vazifa yo\u2019q'); return; }
+  const ov=document.getElementById('focusOv');
+  document.getElementById('focusName').textContent=t.name;
+  document.getElementById('focusCat').textContent=(CATS[t.cat]?.icon||'')+' '+(CATS[t.cat]?.l||'');
+  focusTaskId=t.id;
+  focusStart=Date.now();
+  startFocusTimer();
+  ov.classList.add('open');
+}
+function closeFocusMode(){ document.getElementById('focusOv').classList.remove('open'); stopFocusTimer(); focusTaskId=null; }
+function focusDone(){ if(focusTaskId){ const t=S.tasks.find(x=>x.id===focusTaskId); if(t&&!t.done) toggleTask(focusTaskId); } closeFocusMode(); }
+let focusTaskId=null, focusStart=0, focusTimer=null, pomoMode='work', pomoLeft=25*60;
+function startFocusTimer(){
+  stopFocusTimer();
+  focusTimer=setInterval(()=>{
+    const el=document.getElementById('focusElapsed');
+    if(!el) return;
+    const s=Math.floor((Date.now()-focusStart)/1000);
+    el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+    if(document.getElementById('pomoOn')?.checked){
+      pomoLeft--;
+      const pl=document.getElementById('pomoLeft');
+      if(pl) pl.textContent = (pomoMode==='work'?'\ud83c\udf45 Ish: ':'\u2615 Dam: ')+String(Math.max(0,Math.floor(pomoLeft/60))).padStart(2,'0')+':'+String(Math.max(0,pomoLeft%60)).padStart(2,'0');
+      if(pomoLeft<=0){
+        pomoMode = pomoMode==='work' ? 'break' : 'work';
+        pomoLeft = pomoMode==='work' ? 25*60 : 5*60;
+        try{ new Audio('data:audio/wav;base64,UklGRhwAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=').play(); }catch(e){}
+        toast(pomoMode==='work'?'\ud83c\udf45 Ish vaqti (25 daq)':'\u2615 Dam olish (5 daq)');
+        if(typeof haptic==='function') haptic('medium');
+      }
+    }
+  },1000);
+}
+function stopFocusTimer(){ if(focusTimer){clearInterval(focusTimer); focusTimer=null;} }
+function togglePomo(){
+  pomoMode='work'; pomoLeft=25*60;
+  const wrap=document.getElementById('pomoWrap');
+  if(wrap) wrap.style.display=document.getElementById('pomoOn').checked?'block':'none';
+}
+
+/* ══════════════════════════════════════════════════════
+   INIT — runs after successful unlock
+   ══════════════════════════════════════════════════════ */
+let initDone=false;
+function initApp(){
+  if(initDone) return; initDone=true;
+  try{
+    applyTheme(); applyAccent();
+    if(S.font) document.body.style.fontFamily=S.font;
+    updateTopbar(); updateClock(); setInterval(updateClock,1000);
+    renderSchedule(); renderPrayers && renderPrayers();
+    fetchPrayers();
+    renderStreak && renderStreak();
+    fetchWeather && fetchWeather();
+    setDynamicBg && setDynamicBg();
+    setInterval(()=>{ setDynamicBg && setDynamicBg(); autoCheck && autoCheck(); },60000);
+    registerSW && registerSW();
+    if(S.notifOn){ requestNotifPermission && requestNotifPermission().then(ok=>{ if(ok) scheduleAllNotifications && scheduleAllNotifications(); }); }
+    init3DTilt && init3DTilt();
+    initAutoLock();
+  }catch(e){ console.error('initApp', e); }
+}
+
+/* ══════════════════════════════════════════════════════
+   AUTO-LOCK (harakatsizlik + tabga qaytish)
+   ══════════════════════════════════════════════════════ */
+let autoLockTimer=null, lastActivity=Date.now();
+function initAutoLock(){
+  ['click','touchstart','keydown','mousemove'].forEach(ev=>{
+    document.addEventListener(ev,()=>{ lastActivity=Date.now(); },{passive:true});
+  });
+  clearInterval(autoLockTimer);
+  autoLockTimer=setInterval(()=>{
+    const mins=Number(S.autoLockMin||0);
+    if(mins>0 && Date.now()-lastActivity > mins*60000){ lockNow(); }
+  },10000);
+}
+function lockNow(){
+  document.getElementById('app').style.display='none';
+  const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='flex';
+  showPinLock();
+  if(S.bioOn) tryBiometricUnlock();
+}
+async function tryBiometricUnlock(){
+  try{
+    if(!S.bioCredId) return;
+    if(!window.PublicKeyCredential) return;
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    await navigator.credentials.get({ publicKey:{ challenge, allowCredentials:[{id:base64ToArray(S.bioCredId),type:'public-key'}], userVerification:'required', timeout:30000 } });
+    enterApp();
+  }catch(e){}
+}
+async function enableBiometric(){
+  try{
+    if(!window.PublicKeyCredential){ toast('\u26a0\ufe0f Biometrik qo\u2019llanmaydi'); return; }
+    const challenge=crypto.getRandomValues(new Uint8Array(32));
+    const uid=crypto.getRandomValues(new Uint8Array(16));
+    const cred=await navigator.credentials.create({ publicKey:{
+      challenge, rp:{name:'Kun Tartibim'},
+      user:{id:uid,name:'user',displayName:'Foydalanuvchi'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{userVerification:'required',authenticatorAttachment:'platform'},
+      timeout:60000, attestation:'none'
+    }});
+    if(cred){
+      const raw=new Uint8Array(cred.rawId);
+      S.bioCredId=btoa(String.fromCharCode(...raw));
+      S.bioOn=true; persist();
+      toast('\u2705 Biometrik yoqildi'); renderSettings();
+    }
+  }catch(e){ toast('\u274c Bekor qilindi'); }
+}
+function disableBiometric(){ S.bioOn=false; S.bioCredId=null; persist(); toast('Biometrik o\u2019chirildi'); renderSettings(); }
+
+/* ══════════════════════════════════════════════════════
+   SETTINGS PANEL
+   ══════════════════════════════════════════════════════ */
+function openSettings(){ renderSettings(); document.getElementById('settingsOv').classList.add('open'); }
+function closeSettings(){ document.getElementById('settingsOv').classList.remove('open'); }
+function renderSettings(){
+  const c=document.getElementById('settingsContent'); if(!c) return;
+  const accents=['#22c55e','#3b82f6','#a78bfa','#f59e0b','#ef4444','#f97316','#ec4899','#14b8a6'];
+  const fonts=[{n:'Inter (asosiy)',v:''},{n:'System',v:'system-ui,-apple-system,sans-serif'},{n:'Serif',v:'Georgia,serif'},{n:'Mono',v:'ui-monospace,monospace'}];
+  const langs=[['uz','O\u2019zbek'],['ru','Русский'],['en','English']];
+  const notifTasks = (S.tasks||[]).map(t=>{
+    const on = !S.notifOff || !S.notifOff[t.id];
+    return `<label class="st-row"><span>${esc(t.name)}</span><input type="checkbox" ${on?'checked':''} onchange="toggleTaskNotif(${t.id},this.checked)"></label>`;
+  }).join('');
+  c.innerHTML = `
+    <div class="st-sec"><h4>\ud83c\udfa8 Rang va tema</h4>
+      <div class="st-row"><span>Tema</span>
+        <div class="st-btns">
+          <button onclick="setTheme('dark')" class="${S.theme==='dark'?'on':''}">\ud83c\udf19 Tun</button>
+          <button onclick="setTheme('light')" class="${S.theme==='light'?'on':''}">\u2600\ufe0f Kun</button>
+        </div>
+      </div>
+      <div class="st-row"><span>Accent rang</span>
+        <div class="st-swatches">
+          ${accents.map(a=>`<button class="st-sw ${S.accent===a?'on':''}" style="background:${a}" onclick="setAcc('${a}',this)"></button>`).join('')}
+          <input type="color" value="${S.accent||'#22c55e'}" onchange="setAcc(this.value,null,true)" style="width:36px;height:36px;border:none;background:transparent;cursor:pointer">
+        </div>
+      </div>
+      <div class="st-row"><span>Font</span>
+        <select onchange="setFont(this.value)" class="st-sel">${fonts.map(f=>`<option value="${f.v}" ${(S.font||'')===f.v?'selected':''}>${f.n}</option>`).join('')}</select>
+      </div>
+      <div class="st-row"><span>Jonli fon (vaqtga qarab)</span>
+        <input type="checkbox" ${S.liveBg!==false?'checked':''} onchange="S.liveBg=this.checked;persist();setDynamicBg()">
+      </div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\udd14 Bildirishnomalar</h4>
+      <div class="st-row"><span>Umumiy bildirishnoma</span>
+        <input type="checkbox" ${S.notifOn?'checked':''} onchange="settingsToggleNotif(this.checked)">
+      </div>
+      <div class="st-row"><span>Ovoz</span><input type="checkbox" ${S.notifSound!==false?'checked':''} onchange="S.notifSound=this.checked;persist()"></div>
+      <div class="st-row"><span>Titrash (haptic)</span><input type="checkbox" ${S.notifVibrate!==false?'checked':''} onchange="S.notifVibrate=this.checked;persist()"></div>
+      <div class="st-row"><span>Sokin rejim (faqat namoz)</span><input type="checkbox" ${S.quietMode?'checked':''} onchange="S.quietMode=this.checked;persist();toast(this.checked?'\ud83c\udf19 Sokin rejim':'\ud83d\udd14 Odatiy rejim')"></div>
+      <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--tx2);font-size:12px">Har vazifa uchun alohida</summary>
+        <div style="max-height:200px;overflow:auto;margin-top:6px">${notifTasks}</div>
+      </details>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\udcca Ma\u2019lumot</h4>
+      <div class="st-btns" style="flex-wrap:wrap">
+        <button onclick="exportData()">\u2b07\ufe0f Export JSON</button>
+        <button onclick="document.getElementById('importFile').click()">\u2b06\ufe0f Import JSON</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+        <button onclick="if(confirm('Barcha ma\u2019lumot o\u2019chsinmi?')){localStorage.removeItem('kt5');location.reload()}" style="background:var(--red);color:#fff">\ud83d\uddd1 Reset</button>
+      </div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\udd10 Xavfsizlik</h4>
+      <div class="st-row"><span>PIN kodni o\u2019zgartirish</span><button onclick="changePinFlow()">O\u2019zgartirish</button></div>
+      <div class="st-row"><span>Maxfiy kodni o\u2019zgartirish</span><button onclick="changeSecretFlow()">O\u2019zgartirish</button></div>
+      <div class="st-row"><span>Biometrik (Face/Touch ID)</span>
+        ${S.bioOn?`<button onclick="disableBiometric()" style="background:var(--red);color:#fff">O\u2019chirish</button>`:`<button onclick="enableBiometric()">Yoqish</button>`}
+      </div>
+      <div class="st-row"><span>Auto-lock (daqiqa)</span>
+        <select class="st-sel" onchange="S.autoLockMin=Number(this.value);persist()">
+          ${[0,1,5,10,30].map(m=>`<option value="${m}" ${Number(S.autoLockMin||0)===m?'selected':''}>${m===0?'O\u2019chiq':m+' daq'}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\udd4c Namoz</h4>
+      <div class="st-row"><span>Offset (daqiqa)</span>
+        <input type="number" min="-30" max="30" value="${S.prayerOffset||0}" class="st-sel" style="width:70px" onchange="S.prayerOffset=Number(this.value);persist();fetchPrayers()">
+      </div>
+      <div class="st-row"><span>Vaqtlarni tahrirlash</span><button onclick="closeSettings();openPrayerEdit()">Ochish</button></div>
+      <div class="st-row"><span>Yangilash</span><button onclick="fetchPrayers();toast('\ud83d\udd04 Yangilanmoqda')">Yangilash</button></div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\uddd3\ufe0f Kun sozlamalari</h4>
+      <div class="st-row"><span>Kun boshi</span><input type="time" value="${S.dayStart||'06:30'}" class="st-sel" onchange="S.dayStart=this.value;persist()"></div>
+      <div class="st-row"><span>Uxlash vaqti</span><input type="time" value="${S.sleepTime||'22:30'}" class="st-sel" onchange="S.sleepTime=this.value;persist()"></div>
+      <div class="st-row"><span>Ilova nomi</span><input type="text" value="${esc(S.appName||'Kun Tartibim')}" class="st-sel" onchange="S.appName=this.value.trim()||'Kun Tartibim';persist();updateTopbar()"></div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83c\udf10 Til</h4>
+      <div class="st-btns">${langs.map(([k,n])=>`<button onclick="setLang('${k}')" class="${(S.lang||'uz')===k?'on':''}">${n}</button>`).join('')}</div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83d\udcc8 Tarix (oxirgi 7 kun)</h4>
+      <div id="stHist">${render7DayHist()}</div>
+    </div>
+
+    <div class="st-sec"><h4>\u2139\ufe0f Ma\u2019lumot</h4>
+      <div style="color:var(--tx2);font-size:12px;line-height:1.6">
+        Ilova: <b>${esc(S.appName||'Kun Tartibim')}</b><br>
+        Vazifalar: <b>${S.tasks.length}</b><br>
+        Yozuvlar: <b>${(S.activityLog||[]).length}</b><br>
+        Versiya: 2.0
+      </div>
+    </div>
+  `;
+}
+function render7DayHist(){
+  const days=[]; const now=new Date();
+  for(let i=6;i>=0;i--){
+    const d=new Date(now); d.setDate(d.getDate()-i);
+    const k=d.toISOString().slice(0,10);
+    const h=(S.dayHistory||{})[k];
+    const pct = h ? Math.round((h.done/Math.max(1,h.total))*100) : 0;
+    days.push({k,pct,d});
+  }
+  return `<div style="display:flex;gap:4px;align-items:flex-end;height:70px">${days.map(x=>`<div style="flex:1;text-align:center"><div style="height:60px;display:flex;align-items:flex-end"><div style="width:100%;height:${Math.max(4,x.pct*0.6)}px;background:var(--accent);border-radius:4px;opacity:${0.4+x.pct/200}" title="${x.pct}%"></div></div><div style="font-size:9px;color:var(--tx3);margin-top:3px">${x.d.getDate()}</div></div>`).join('')}</div>`;
+}
+function setFont(v){ S.font=v; persist(); document.body.style.fontFamily=v||''; toast('\u270d Font o\u2019zgardi'); }
+function settingsToggleNotif(on){ S.notifOn=on; persist(); if(on) requestNotifPermission && requestNotifPermission().then(ok=>{ if(ok) scheduleAllNotifications && scheduleAllNotifications(); else{ S.notifOn=false; persist(); renderSettings(); toast('\u274c Ruxsat berilmadi'); } }); else toast('\ud83d\udd15 O\u2019chirildi'); }
+function toggleTaskNotif(id,on){ if(!S.notifOff) S.notifOff={}; if(on) delete S.notifOff[id]; else S.notifOff[id]=true; persist(); }
+function exportData(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='kun-tartibim-'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+  toast('\u2b07\ufe0f Yuklandi');
+}
+function importData(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{ try{ const d=JSON.parse(e.target.result); if(!d.tasks) throw new Error(); S=Object.assign({},S,d); persist(); toast('\u2705 Import qilindi'); location.reload(); }catch{ toast('\u274c Noto\u2019g\u2019ri fayl'); } };
+  r.readAsText(f);
+}
+function changePinFlow(){
+  const cur=prompt('Joriy PIN kodni kiriting:'); if(cur===null) return;
+  if(cur!==S.pinCode){ toast('\u274c Noto\u2019g\u2019ri'); return; }
+  const nw=prompt('Yangi 4 raqamli PIN:'); if(!nw||!/^\d{4}$/.test(nw)){ toast('4 ta raqam kerak'); return; }
+  const nw2=prompt('Qayta kiriting:'); if(nw!==nw2){ toast('Mos kelmadi'); return; }
+  S.pinCode=nw; persist(); toast('\u2705 PIN yangilandi');
+}
+function changeSecretFlow(){
+  const cur=prompt('Joriy maxfiy kod:'); if(cur===null) return;
+  const currentSecret=S.secretCode||SECRET_CODE;
+  if(cur!==currentSecret){ toast('\u274c Noto\u2019g\u2019ri'); return; }
+  const nw=prompt('Yangi maxfiy kod (kamida 6 belgi):'); if(!nw||nw.length<6){ toast('Kamida 6 belgi'); return; }
+  S.secretCode=nw; persist(); toast('\u2705 Yangilandi');
+}
+
+/* ══════════════════════════════════════════════════════
+   BOOT — PIN/biometric flow (no login/password)
+   ══════════════════════════════════════════════════════ */
 (function(){
   function boot(){
-    try {
-      var ls=document.getElementById('lockScreen'); if(ls) ls.style.display='none';
-      var ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
-      var app=document.getElementById('app'); if(app) app.style.display='block';
-      if(typeof hydrate==='function') hydrate();
-      if(typeof applyTheme==='function') try{applyTheme();}catch(e){}
-      if(typeof applyAccent==='function') try{applyAccent();}catch(e){}
-      if(typeof updateTopbar==='function') try{updateTopbar();}catch(e){}
-      if(typeof renderSchedule==='function') try{renderSchedule();}catch(e){console.error(e);}
-      if(typeof renderPrayers==='function') try{renderPrayers();}catch(e){}
-      if(typeof fetchPrayers==='function') try{fetchPrayers();}catch(e){}
-      if(typeof renderStreak==='function') try{renderStreak();}catch(e){}
-      if(typeof renderWeatherCard==='function') try{renderWeatherCard();}catch(e){}
-      if(typeof fetchWeather==='function') try{fetchWeather();}catch(e){}
-      if(typeof updateClock==='function') try{updateClock();setInterval(updateClock,1000);}catch(e){}
-      if(typeof initApp==='function') initApp();
-    } catch(e){ console.error('boot error', e); }
+    try{
+      hydrate();
+      applyTheme && applyTheme();
+      applyAccent && applyAccent();
+      // Hide login card & admin panel — we use PIN only
+      const lc=document.getElementById('loginCard'); if(lc) lc.style.display='none';
+      const ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
+      const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='flex';
+      const app=document.getElementById('app'); if(app) app.style.display='none';
+      if(!S.pinSetupDone){ showPinSetup(); }
+      else{ showPinLock(); if(S.bioOn) setTimeout(tryBiometricUnlock,300); }
+    }catch(e){ console.error('boot', e); }
   }
+  // Override enterApp so it also runs initApp
+  const _enter=window.enterApp;
+  window.enterApp=function(){
+    document.getElementById('lockScreen').style.display='none';
+    document.getElementById('adminPanel').style.display='none';
+    document.getElementById('app').style.display='block';
+    initApp();
+  };
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
   else boot();
-  document.addEventListener('visibilitychange', function(e){ e.stopImmediatePropagation(); }, true);
-  window.confirmLogout = function(){ };
 })();
 </script>
+
+<!-- ═══ SETTINGS OVERLAY ═══ -->
+<div class="ov" id="settingsOv">
+  <div class="sheet" style="max-width:520px">
+    <div class="sh-hdl"></div>
+    <div class="sh-title">⚙️ Sozlamalar</div>
+    <div id="settingsContent" style="max-height:70vh;overflow-y:auto;padding-right:4px"></div>
+    <div class="sh-btns"><button class="bs" onclick="closeSettings()">Yopish</button></div>
+  </div>
+</div>
+
+<!-- ═══ FOCUS MODE OVERLAY ═══ -->
+<div class="ov" id="focusOv">
+  <div class="sheet" style="max-width:420px;text-align:center">
+    <div class="sh-hdl"></div>
+    <div style="font-size:12px;color:var(--tx2)" id="focusCat"></div>
+    <div style="font-size:20px;font-weight:800;margin:8px 0" id="focusName"></div>
+    <div style="font-size:56px;font-weight:900;font-variant-numeric:tabular-nums;color:var(--accent);margin:16px 0" id="focusElapsed">00:00</div>
+    <label class="st-row" style="justify-content:center;gap:10px"><input type="checkbox" id="pomoOn" onchange="togglePomo()"> Pomodoro (25+5)</label>
+    <div id="pomoWrap" style="display:none;margin:8px 0;font-size:14px;color:var(--tx2)" ><span id="pomoLeft">🍅 Ish: 25:00</span></div>
+    <div class="sh-btns"><button class="bs" onclick="closeFocusMode()">Chiqish</button><button class="bs" style="background:var(--accent);color:#000" onclick="focusDone()">✅ Bajardim</button></div>
+  </div>
+</div>
+
+<style>
+.st-sec{margin:14px 0;padding:12px;background:var(--glass-bg);border:1px solid var(--bdr);border-radius:14px}
+.st-sec h4{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--tx)}
+.st-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:13px;color:var(--tx);gap:8px}
+.st-row + .st-row{border-top:1px solid var(--bdr)}
+.st-btns{display:flex;gap:6px;flex-wrap:wrap}
+.st-btns button{padding:7px 12px;border-radius:10px;border:1px solid var(--bdr2);background:var(--glass-bg2);color:var(--tx);font-size:12px;font-weight:600;cursor:pointer}
+.st-btns button.on{background:var(--accent);color:#000;border-color:var(--accent)}
+.st-sel{padding:6px 10px;border-radius:10px;border:1px solid var(--bdr2);background:var(--glass-bg2);color:var(--tx);font-size:13px}
+.st-swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.st-sw{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.st-sw.on{border-color:var(--tx)}
+</style>
 
 </body>
 </html>
