@@ -1078,14 +1078,14 @@ function shakeDots(id){
 
 function checkSecret(){
   const v=document.getElementById('secretInp').value.trim();
-  if(v===SECRET_CODE){
+  const expected = S.secretCode || SECRET_CODE;
+  if(v===expected){
     document.getElementById('secretErr').textContent='';
-    // show new pin setup
     S.pinSetupDone=false; persist();
     showPinSetup();
-    document.getElementById('lockSub').textContent='Yangi PIN kod o\'rnating';
+    document.getElementById('lockSub').textContent='Yangi PIN kod o\u2019rnating';
   } else {
-    document.getElementById('secretErr').textContent='Noto\'g\'ri maxfiy kod';
+    document.getElementById('secretErr').textContent='Noto\u2019g\u2019ri maxfiy kod';
   }
 }
 
