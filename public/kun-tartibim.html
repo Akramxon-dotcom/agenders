@@ -2423,26 +2423,128 @@ function changeSecretFlow(){
       hydrate();
       applyTheme && applyTheme();
       applyAccent && applyAccent();
-      // Hide login card & admin panel — we use PIN only
+      applyRadius && applyRadius();
+      applyAnim && applyAnim();
+      applyVisibility && applyVisibility();
       const lc=document.getElementById('loginCard'); if(lc) lc.style.display='none';
       const ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
+      // Agar qulflash butunlay oʻchirilgan boʻlsa — toʻgʻridan-toʻgʻri ilovaga
+      if(S.lockDisabled){
+        const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='none';
+        const app=document.getElementById('app'); if(app) app.style.display='block';
+        initApp();
+        const lb=document.getElementById('lockBtn'); if(lb) lb.style.display='none';
+        return;
+      }
       const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='flex';
       const app=document.getElementById('app'); if(app) app.style.display='none';
       if(!S.pinSetupDone){ showPinSetup(); }
       else{ showPinLock(); if(S.bioOn) setTimeout(tryBiometricUnlock,300); }
     }catch(e){ console.error('boot', e); }
   }
-  // Override enterApp so it also runs initApp
-  const _enter=window.enterApp;
   window.enterApp=function(){
-    document.getElementById('lockScreen').style.display='none';
-    document.getElementById('adminPanel').style.display='none';
+    const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='none';
+    const ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
     document.getElementById('app').style.display='block';
     initApp();
   };
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
   else boot();
 })();
+
+/* ══════════════════════════════════════════════════════
+   INTERFACE TOGGLE HELPERS
+   ══════════════════════════════════════════════════════ */
+function applyVisibility(){
+  const map={showPrayer:'prayerCard', showProgress:'progCard'};
+  Object.entries(map).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display = (S[k]===false?'none':'');
+  });
+  const lb=document.getElementById('lockBtn'); if(lb) lb.style.display = S.lockDisabled?'none':'';
+  const smart=document.querySelector('.smart-add'); if(smart) smart.style.display = (S.showSmartAdd===false?'none':'');
+}
+function applyRadius(){
+  const s=Number(S.radiusScale||1);
+  const r=document.documentElement.style;
+  r.setProperty('--r',(12*s)+'px'); r.setProperty('--r2',(18*s)+'px');
+  r.setProperty('--r3',(24*s)+'px'); r.setProperty('--r4',(32*s)+'px');
+}
+function applyAnim(){
+  const v=S.animSpeed||'normal';
+  document.body.classList.toggle('no-anim', v==='off');
+}
+
+/* ══════════════════════════════════════════════════════
+   ✨ AJOYIB — AQLLI VAZIFA QOʻSHISH
+   Kun boshi va uxlash oraligʻida boʻsh joy qidiradi.
+   Joy topilmasa — past muhimlikdagi vazifalarni qisqartiradi.
+   HECH QACHON uxlash vaqtidan oshib ketmaydi.
+   ══════════════════════════════════════════════════════ */
+function smartAddTask(){
+  const name = prompt('✨ Yangi vazifa nomi:');
+  if(!name||!name.trim()) return;
+  const durStr = prompt('Taxminiy davomiylik (daqiqa):','30');
+  const dur = Math.max(5, Math.min(240, Number(durStr)||30));
+  const dayStart = t2m(S.dayStart||'06:30');
+  const sleep = t2m(S.sleepTime||'22:30');
+
+  function scheduled(){
+    return S.tasks.filter(t=>t.start&&t.end&&t2m(t.start)>=dayStart&&t2m(t.end)<=sleep)
+      .sort((a,b)=>t2m(a.start)-t2m(b.start));
+  }
+  function findGap(list){
+    let cursor=dayStart;
+    for(const t of list){
+      const s=t2m(t.start);
+      if(s-cursor>=dur) return cursor;
+      cursor=Math.max(cursor,t2m(t.end));
+    }
+    if(sleep-cursor>=dur) return cursor;
+    return null;
+  }
+
+  let list=scheduled();
+  let slot=findGap(list);
+  const log=[];
+  const backup=JSON.stringify(S.tasks);
+
+  if(slot===null){
+    // Muhim vazifalarni himoya qilamiz: prayer, medicine
+    const protectedCats=['prayer','medicine'];
+    const shrinkable=[...list]
+      .filter(t=>!protectedCats.includes(t.cat))
+      .sort((a,b)=>(PRIORITY[a.cat]||2)-(PRIORITY[b.cat]||2));
+    let need=dur;
+    for(const t of shrinkable){
+      if(need<=0) break;
+      const cur=t2m(t.end)-t2m(t.start);
+      const minKeep=Math.max(10, Math.ceil(cur*0.5));
+      const canShrink=cur-minKeep;
+      if(canShrink<=0) continue;
+      const take=Math.min(canShrink,need);
+      t.end=m2t(t2m(t.end)-take);
+      log.push(t.name+' (−'+take+'d)');
+      need-=take;
+    }
+    list=scheduled();
+    slot=findGap(list);
+    if(slot===null){
+      S.tasks=JSON.parse(backup);
+      alert('❌ Kun ('+m2t(dayStart)+'–'+m2t(sleep)+') ichida yetarli joy topilmadi.\nVazifani qisqaroq qiling yoki muhim boʻlmagan vazifalarni oʻchiring.');
+      return;
+    }
+  }
+
+  S.tasks.push({
+    id: Date.now(), name: name.trim(),
+    start: m2t(slot), end: m2t(slot+dur),
+    cat: 'other', note: '✨ Aqlli qo\'shildi',
+    done:false, autoChecked:false, deferred:false
+  });
+  persist(); renderSchedule();
+  toast('✨ '+name.trim()+' → '+m2t(slot)+'–'+m2t(slot+dur)+(log.length?' • '+log.length+' vazifa qisqardi':''));
+}
 </script>
 
 <!-- ═══ SETTINGS OVERLAY ═══ -->
