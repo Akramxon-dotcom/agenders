@@ -2549,11 +2549,14 @@ function smartAddTask(){
 
 <!-- ═══ SETTINGS OVERLAY ═══ -->
 <div class="ov" id="settingsOv">
-  <div class="sheet" style="max-width:520px">
+  <div class="sheet" style="max-width:520px;position:relative;padding-top:14px">
     <div class="sh-hdl"></div>
-    <div class="sh-title">⚙️ Sozlamalar</div>
-    <div id="settingsContent" style="max-height:70vh;overflow-y:auto;padding-right:4px"></div>
-    <div class="sh-btns"><button class="bs" onclick="closeSettings()">Yopish</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 12px;position:sticky;top:0;background:var(--bg2);padding:6px 0;z-index:5">
+      <div class="sh-title" style="margin:0;font-size:17px;font-weight:800">⚙️ Sozlamalar</div>
+      <button onclick="closeSettings()" title="Yopish" aria-label="Yopish" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--bdr2);background:var(--glass-bg2);color:var(--tx);font-size:20px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <div id="settingsContent" style="max-height:65vh;overflow-y:auto;padding-right:4px"></div>
+    <div class="sh-btns" style="margin-top:14px"><button class="bs" onclick="closeSettings()" style="width:100%;background:var(--accent);color:#000;font-weight:700;padding:12px">✓ Yopish (avtomatik saqlanadi)</button></div>
   </div>
 </div>
 
@@ -2582,6 +2585,9 @@ function smartAddTask(){
 .st-swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .st-sw{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .st-sw.on{border-color:var(--tx)}
+body.no-anim *,body.no-anim *::before,body.no-anim *::after{animation-duration:0.001s!important;transition-duration:0.001s!important}
+.ib.smart-add{position:relative;overflow:hidden}
+.ib.smart-add::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.4),transparent 60%);pointer-events:none}
 </style>
 
 </body>
