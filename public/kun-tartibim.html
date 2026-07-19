@@ -1188,7 +1188,7 @@ function parsePrayerHtml(html){
   return null;
 }
 
-function refreshPrayer(){ toast('🔄 Yangilanmoqda...'); fetchPrayers(); }
+function refreshPrayer(){ S.prayersManual=false; persist(); toast('🔄 Yangilanmoqda...'); fetchPrayers(true); }
 
 function t2m(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
 
