@@ -1221,7 +1221,8 @@ function openPrayerEdit(){
 }
 function savePrayers(){
   S.prayers={fajr:document.getElementById('pe-fajr').value,dhuhr:document.getElementById('pe-dhuhr').value,asr:document.getElementById('pe-asr').value,maghrib:document.getElementById('pe-maghrib').value,isha:document.getElementById('pe-isha').value};
-  persist(); closeOv('ovPrayer'); renderPrayers(); toast('✅ Namoz vaqtlari saqlandi');
+  S.prayersManual=true;
+  persist(); closeOv('ovPrayer'); renderPrayers(); toast('✅ Namoz vaqtlari saqlandi (avto-yangilanmaydi)');
 }
 
 // ═══════════════════════════════════════
