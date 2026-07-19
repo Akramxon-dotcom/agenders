@@ -2136,7 +2136,11 @@ function toggleTask(id){
   persist(); renderSchedule(); updateProgress(); renderStreak && renderStreak();
   if(typeof haptic==='function') haptic('light');
 }
-async function fetchPrayers(){
+async function fetchPrayers(force){
+  // Foydalanuvchi qoʻlda tahrirlagan boʻlsa — hech qachon ustidan yozmaymiz
+  if(!force && S.prayersManual) return;
+  // Kesh: agar oxirgi yangilashdan 24 soat oʻtmagan boʻlsa — qayta olmaymiz
+  if(!force && S.prayersFetchedAt && (Date.now()-S.prayersFetchedAt < 24*3600*1000)) return;
   try{
     const r=await fetch('https://api.aladhan.com/v1/timingsByCity?city=Margilan&country=Uzbekistan&method=2',{signal:AbortSignal.timeout(6000)});
     const d=await r.json();
@@ -2145,6 +2149,7 @@ async function fetchPrayers(){
       const off=Number(S.prayerOffset||0);
       const shift=(t)=>{ const [h,m]=t.split(':').map(Number); const total=h*60+m+off; const H=((total%1440)+1440)%1440; return String(Math.floor(H/60)).padStart(2,'0')+':'+String(H%60).padStart(2,'0'); };
       S.prayers={fajr:shift(T.Fajr),dhuhr:shift(T.Dhuhr),asr:shift(T.Asr),maghrib:shift(T.Maghrib),isha:shift(T.Isha)};
+      S.prayersFetchedAt=Date.now();
       persist(); renderPrayers && renderPrayers();
     }
   }catch(e){}
