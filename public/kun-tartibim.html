@@ -2329,24 +2329,48 @@ function renderSettings(){
     </div>
 
     <div class="st-sec"><h4>\ud83d\udd10 Xavfsizlik</h4>
-      <div class="st-row"><span>PIN kodni o\u2019zgartirish</span><button onclick="changePinFlow()">O\u2019zgartirish</button></div>
-      <div class="st-row"><span>Maxfiy kodni o\u2019zgartirish</span><button onclick="changeSecretFlow()">O\u2019zgartirish</button></div>
+      <div class="st-row"><span><b>Kirish qulfi (PIN)</b><br><span style="font-size:11px;color:var(--tx2)">Yoqilsa — har safar PIN soʻraladi</span></span>
+        <input type="checkbox" ${!S.lockDisabled?'checked':''} onchange="S.lockDisabled=!this.checked;persist();applyVisibility();toast(this.checked?'\ud83d\udd12 PIN qulfi yoqildi':'\ud83d\udd13 PIN qulfi oʻchirildi')">
+      </div>
+      <div class="st-row"><span>PIN kodni oʻzgartirish</span><button onclick="changePinFlow()">Oʻzgartirish</button></div>
+      <div class="st-row"><span>Maxfiy kodni oʻzgartirish</span><button onclick="changeSecretFlow()">Oʻzgartirish</button></div>
       <div class="st-row"><span>Biometrik (Face/Touch ID)</span>
-        ${S.bioOn?`<button onclick="disableBiometric()" style="background:var(--red);color:#fff">O\u2019chirish</button>`:`<button onclick="enableBiometric()">Yoqish</button>`}
+        ${S.bioOn?`<button onclick="disableBiometric()" style="background:var(--red);color:#fff">Oʻchirish</button>`:`<button onclick="enableBiometric()">Yoqish</button>`}
       </div>
       <div class="st-row"><span>Auto-lock (daqiqa)</span>
         <select class="st-sel" onchange="S.autoLockMin=Number(this.value);persist()">
-          ${[0,1,5,10,30].map(m=>`<option value="${m}" ${Number(S.autoLockMin||0)===m?'selected':''}>${m===0?'O\u2019chiq':m+' daq'}</option>`).join('')}
+          ${[0,1,5,10,30].map(m=>`<option value="${m}" ${Number(S.autoLockMin||0)===m?'selected':''}>${m===0?'Oʻchiq':m+' daq'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="st-row"><span>Tabga qaytishda qulflash</span><input type="checkbox" ${S.autoLockOnHide?'checked':''} onchange="S.autoLockOnHide=this.checked;persist()"></div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83c\udf9b\ufe0f Interfeys va funksiyalar</h4>
+      <div class="st-row"><span>Progress kartochkasi</span><input type="checkbox" ${S.showProgress!==false?'checked':''} onchange="S.showProgress=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>Namoz kartochkasi</span><input type="checkbox" ${S.showPrayer!==false?'checked':''} onchange="S.showPrayer=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>\u2728 Aqlli qoʻshish tugmasi</span><input type="checkbox" ${S.showSmartAdd!==false?'checked':''} onchange="S.showSmartAdd=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>Ertalab avto-belgilash</span><input type="checkbox" ${S.autoCheckMorn!==false?'checked':''} onchange="S.autoCheckMorn=this.checked;persist()"></div>
+      <div class="st-row"><span>Yumaloqlik darajasi</span>
+        <select class="st-sel" onchange="S.radiusScale=Number(this.value);persist();applyRadius()">
+          ${[[0.5,'Tik'],[1,'Odatiy'],[1.5,'Yumaloq']].map(([v,n])=>`<option value="${v}" ${Number(S.radiusScale||1)===v?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="st-row"><span>Animatsiya</span>
+        <select class="st-sel" onchange="S.animSpeed=this.value;persist();applyAnim()">
+          ${[['off','Oʻchiq'],['normal','Odatiy']].map(([v,n])=>`<option value="${v}" ${(S.animSpeed||'normal')===v?'selected':''}>${n}</option>`).join('')}
         </select>
       </div>
     </div>
 
     <div class="st-sec"><h4>\ud83d\udd4c Namoz</h4>
       <div class="st-row"><span>Offset (daqiqa)</span>
-        <input type="number" min="-30" max="30" value="${S.prayerOffset||0}" class="st-sel" style="width:70px" onchange="S.prayerOffset=Number(this.value);persist();fetchPrayers()">
+        <input type="number" min="-30" max="30" value="${S.prayerOffset||0}" class="st-sel" style="width:70px" onchange="S.prayerOffset=Number(this.value);persist()">
+      </div>
+      <div class="st-row"><span><b>Qoʻlda saqlangan</b><br><span style="font-size:11px;color:var(--tx2)">Yoqilsa — internetdan avto-yangilanmaydi</span></span>
+        <input type="checkbox" ${S.prayersManual?'checked':''} onchange="S.prayersManual=this.checked;persist();toast(this.checked?'\ud83d\udd12 Qoʻlda saqlandi':'\ud83d\udd04 Avto-yangilash yoqildi')">
       </div>
       <div class="st-row"><span>Vaqtlarni tahrirlash</span><button onclick="closeSettings();openPrayerEdit()">Ochish</button></div>
-      <div class="st-row"><span>Yangilash</span><button onclick="fetchPrayers();toast('\ud83d\udd04 Yangilanmoqda')">Yangilash</button></div>
+      <div class="st-row"><span>Internet orqali yangilash</span><button onclick="S.prayersManual=false;persist();fetchPrayers(true);toast('\ud83d\udd04 Yangilanmoqda')">Yangilash</button></div>
     </div>
 
     <div class="st-sec"><h4>\ud83d\uddd3\ufe0f Kun sozlamalari</h4>
