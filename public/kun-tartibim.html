@@ -677,12 +677,13 @@ body::before {
       <div class="topbar-date" id="topDate"></div>
     </div>
     <div class="topbar-right">
+      <button class="ib smart-add" onclick="smartAddTask()" title="Aqlli qo'shish" style="background:linear-gradient(135deg,#a78bfa 0%,#22c55e 100%);color:#fff;border:none;box-shadow:0 4px 14px rgba(167,139,250,.45)">✨</button>
       <button class="edit-mode-btn" id="editModeBtn" onclick="toggleEditMode()" title="Tahrirlash rejimi">✏️</button>
       <button class="ib" id="notifBtn" onclick="toggleNotifications()" title="Bildirishnomalar">🔕</button>
       <button class="ib" id="themeBtn" onclick="toggleTheme()">🌙</button>
       <button class="ib" onclick="refreshPrayer()" title="Namoz vaqtlarini yangilash">🔄</button>
       <button class="ib" onclick="openSettings()" title="Sozlamalar">⚙️</button>
-      <button class="ib" onclick="lockNow()" title="Qulflash">🔒</button>
+      <button class="ib" id="lockBtn" onclick="lockNow()" title="Qulflash">🔒</button>
     </div>
   </div>
 
@@ -1188,7 +1189,7 @@ function parsePrayerHtml(html){
   return null;
 }
 
-function refreshPrayer(){ toast('🔄 Yangilanmoqda...'); fetchPrayers(); }
+function refreshPrayer(){ S.prayersManual=false; persist(); toast('🔄 Yangilanmoqda...'); fetchPrayers(true); }
 
 function t2m(t){ if(!t)return 0; const[h,m]=t.split(':').map(Number); return h*60+(m||0); }
 
@@ -1221,7 +1222,8 @@ function openPrayerEdit(){
 }
 function savePrayers(){
   S.prayers={fajr:document.getElementById('pe-fajr').value,dhuhr:document.getElementById('pe-dhuhr').value,asr:document.getElementById('pe-asr').value,maghrib:document.getElementById('pe-maghrib').value,isha:document.getElementById('pe-isha').value};
-  persist(); closeOv('ovPrayer'); renderPrayers(); toast('✅ Namoz vaqtlari saqlandi');
+  S.prayersManual=true;
+  persist(); closeOv('ovPrayer'); renderPrayers(); toast('✅ Namoz vaqtlari saqlandi (avto-yangilanmaydi)');
 }
 
 // ═══════════════════════════════════════
@@ -2135,7 +2137,11 @@ function toggleTask(id){
   persist(); renderSchedule(); updateProgress(); renderStreak && renderStreak();
   if(typeof haptic==='function') haptic('light');
 }
-async function fetchPrayers(){
+async function fetchPrayers(force){
+  // Foydalanuvchi qoʻlda tahrirlagan boʻlsa — hech qachon ustidan yozmaymiz
+  if(!force && S.prayersManual) return;
+  // Kesh: agar oxirgi yangilashdan 24 soat oʻtmagan boʻlsa — qayta olmaymiz
+  if(!force && S.prayersFetchedAt && (Date.now()-S.prayersFetchedAt < 24*3600*1000)) return;
   try{
     const r=await fetch('https://api.aladhan.com/v1/timingsByCity?city=Margilan&country=Uzbekistan&method=2',{signal:AbortSignal.timeout(6000)});
     const d=await r.json();
@@ -2144,6 +2150,7 @@ async function fetchPrayers(){
       const off=Number(S.prayerOffset||0);
       const shift=(t)=>{ const [h,m]=t.split(':').map(Number); const total=h*60+m+off; const H=((total%1440)+1440)%1440; return String(Math.floor(H/60)).padStart(2,'0')+':'+String(H%60).padStart(2,'0'); };
       S.prayers={fajr:shift(T.Fajr),dhuhr:shift(T.Dhuhr),asr:shift(T.Asr),maghrib:shift(T.Maghrib),isha:shift(T.Isha)};
+      S.prayersFetchedAt=Date.now();
       persist(); renderPrayers && renderPrayers();
     }
   }catch(e){}
@@ -2322,24 +2329,48 @@ function renderSettings(){
     </div>
 
     <div class="st-sec"><h4>\ud83d\udd10 Xavfsizlik</h4>
-      <div class="st-row"><span>PIN kodni o\u2019zgartirish</span><button onclick="changePinFlow()">O\u2019zgartirish</button></div>
-      <div class="st-row"><span>Maxfiy kodni o\u2019zgartirish</span><button onclick="changeSecretFlow()">O\u2019zgartirish</button></div>
+      <div class="st-row"><span><b>Kirish qulfi (PIN)</b><br><span style="font-size:11px;color:var(--tx2)">Yoqilsa — har safar PIN soʻraladi</span></span>
+        <input type="checkbox" ${!S.lockDisabled?'checked':''} onchange="S.lockDisabled=!this.checked;persist();applyVisibility();toast(this.checked?'\ud83d\udd12 PIN qulfi yoqildi':'\ud83d\udd13 PIN qulfi oʻchirildi')">
+      </div>
+      <div class="st-row"><span>PIN kodni oʻzgartirish</span><button onclick="changePinFlow()">Oʻzgartirish</button></div>
+      <div class="st-row"><span>Maxfiy kodni oʻzgartirish</span><button onclick="changeSecretFlow()">Oʻzgartirish</button></div>
       <div class="st-row"><span>Biometrik (Face/Touch ID)</span>
-        ${S.bioOn?`<button onclick="disableBiometric()" style="background:var(--red);color:#fff">O\u2019chirish</button>`:`<button onclick="enableBiometric()">Yoqish</button>`}
+        ${S.bioOn?`<button onclick="disableBiometric()" style="background:var(--red);color:#fff">Oʻchirish</button>`:`<button onclick="enableBiometric()">Yoqish</button>`}
       </div>
       <div class="st-row"><span>Auto-lock (daqiqa)</span>
         <select class="st-sel" onchange="S.autoLockMin=Number(this.value);persist()">
-          ${[0,1,5,10,30].map(m=>`<option value="${m}" ${Number(S.autoLockMin||0)===m?'selected':''}>${m===0?'O\u2019chiq':m+' daq'}</option>`).join('')}
+          ${[0,1,5,10,30].map(m=>`<option value="${m}" ${Number(S.autoLockMin||0)===m?'selected':''}>${m===0?'Oʻchiq':m+' daq'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="st-row"><span>Tabga qaytishda qulflash</span><input type="checkbox" ${S.autoLockOnHide?'checked':''} onchange="S.autoLockOnHide=this.checked;persist()"></div>
+    </div>
+
+    <div class="st-sec"><h4>\ud83c\udf9b\ufe0f Interfeys va funksiyalar</h4>
+      <div class="st-row"><span>Progress kartochkasi</span><input type="checkbox" ${S.showProgress!==false?'checked':''} onchange="S.showProgress=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>Namoz kartochkasi</span><input type="checkbox" ${S.showPrayer!==false?'checked':''} onchange="S.showPrayer=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>\u2728 Aqlli qoʻshish tugmasi</span><input type="checkbox" ${S.showSmartAdd!==false?'checked':''} onchange="S.showSmartAdd=this.checked;persist();applyVisibility()"></div>
+      <div class="st-row"><span>Ertalab avto-belgilash</span><input type="checkbox" ${S.autoCheckMorn!==false?'checked':''} onchange="S.autoCheckMorn=this.checked;persist()"></div>
+      <div class="st-row"><span>Yumaloqlik darajasi</span>
+        <select class="st-sel" onchange="S.radiusScale=Number(this.value);persist();applyRadius()">
+          ${[[0.5,'Tik'],[1,'Odatiy'],[1.5,'Yumaloq']].map(([v,n])=>`<option value="${v}" ${Number(S.radiusScale||1)===v?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="st-row"><span>Animatsiya</span>
+        <select class="st-sel" onchange="S.animSpeed=this.value;persist();applyAnim()">
+          ${[['off','Oʻchiq'],['normal','Odatiy']].map(([v,n])=>`<option value="${v}" ${(S.animSpeed||'normal')===v?'selected':''}>${n}</option>`).join('')}
         </select>
       </div>
     </div>
 
     <div class="st-sec"><h4>\ud83d\udd4c Namoz</h4>
       <div class="st-row"><span>Offset (daqiqa)</span>
-        <input type="number" min="-30" max="30" value="${S.prayerOffset||0}" class="st-sel" style="width:70px" onchange="S.prayerOffset=Number(this.value);persist();fetchPrayers()">
+        <input type="number" min="-30" max="30" value="${S.prayerOffset||0}" class="st-sel" style="width:70px" onchange="S.prayerOffset=Number(this.value);persist()">
+      </div>
+      <div class="st-row"><span><b>Qoʻlda saqlangan</b><br><span style="font-size:11px;color:var(--tx2)">Yoqilsa — internetdan avto-yangilanmaydi</span></span>
+        <input type="checkbox" ${S.prayersManual?'checked':''} onchange="S.prayersManual=this.checked;persist();toast(this.checked?'\ud83d\udd12 Qoʻlda saqlandi':'\ud83d\udd04 Avto-yangilash yoqildi')">
       </div>
       <div class="st-row"><span>Vaqtlarni tahrirlash</span><button onclick="closeSettings();openPrayerEdit()">Ochish</button></div>
-      <div class="st-row"><span>Yangilash</span><button onclick="fetchPrayers();toast('\ud83d\udd04 Yangilanmoqda')">Yangilash</button></div>
+      <div class="st-row"><span>Internet orqali yangilash</span><button onclick="S.prayersManual=false;persist();fetchPrayers(true);toast('\ud83d\udd04 Yangilanmoqda')">Yangilash</button></div>
     </div>
 
     <div class="st-sec"><h4>\ud83d\uddd3\ufe0f Kun sozlamalari</h4>
@@ -2416,35 +2447,140 @@ function changeSecretFlow(){
       hydrate();
       applyTheme && applyTheme();
       applyAccent && applyAccent();
-      // Hide login card & admin panel — we use PIN only
+      applyRadius && applyRadius();
+      applyAnim && applyAnim();
+      applyVisibility && applyVisibility();
       const lc=document.getElementById('loginCard'); if(lc) lc.style.display='none';
       const ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
+      // Agar qulflash butunlay oʻchirilgan boʻlsa — toʻgʻridan-toʻgʻri ilovaga
+      if(S.lockDisabled){
+        const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='none';
+        const app=document.getElementById('app'); if(app) app.style.display='block';
+        initApp();
+        const lb=document.getElementById('lockBtn'); if(lb) lb.style.display='none';
+        return;
+      }
       const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='flex';
       const app=document.getElementById('app'); if(app) app.style.display='none';
       if(!S.pinSetupDone){ showPinSetup(); }
       else{ showPinLock(); if(S.bioOn) setTimeout(tryBiometricUnlock,300); }
     }catch(e){ console.error('boot', e); }
   }
-  // Override enterApp so it also runs initApp
-  const _enter=window.enterApp;
   window.enterApp=function(){
-    document.getElementById('lockScreen').style.display='none';
-    document.getElementById('adminPanel').style.display='none';
+    const ls=document.getElementById('lockScreen'); if(ls) ls.style.display='none';
+    const ap=document.getElementById('adminPanel'); if(ap) ap.style.display='none';
     document.getElementById('app').style.display='block';
     initApp();
   };
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot);
   else boot();
 })();
+
+/* ══════════════════════════════════════════════════════
+   INTERFACE TOGGLE HELPERS
+   ══════════════════════════════════════════════════════ */
+function applyVisibility(){
+  const map={showPrayer:'prayerCard', showProgress:'progCard'};
+  Object.entries(map).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display = (S[k]===false?'none':'');
+  });
+  const lb=document.getElementById('lockBtn'); if(lb) lb.style.display = S.lockDisabled?'none':'';
+  const smart=document.querySelector('.smart-add'); if(smart) smart.style.display = (S.showSmartAdd===false?'none':'');
+}
+function applyRadius(){
+  const s=Number(S.radiusScale||1);
+  const r=document.documentElement.style;
+  r.setProperty('--r',(12*s)+'px'); r.setProperty('--r2',(18*s)+'px');
+  r.setProperty('--r3',(24*s)+'px'); r.setProperty('--r4',(32*s)+'px');
+}
+function applyAnim(){
+  const v=S.animSpeed||'normal';
+  document.body.classList.toggle('no-anim', v==='off');
+}
+
+/* ══════════════════════════════════════════════════════
+   ✨ AJOYIB — AQLLI VAZIFA QOʻSHISH
+   Kun boshi va uxlash oraligʻida boʻsh joy qidiradi.
+   Joy topilmasa — past muhimlikdagi vazifalarni qisqartiradi.
+   HECH QACHON uxlash vaqtidan oshib ketmaydi.
+   ══════════════════════════════════════════════════════ */
+function smartAddTask(){
+  const name = prompt('✨ Yangi vazifa nomi:');
+  if(!name||!name.trim()) return;
+  const durStr = prompt('Taxminiy davomiylik (daqiqa):','30');
+  const dur = Math.max(5, Math.min(240, Number(durStr)||30));
+  const dayStart = t2m(S.dayStart||'06:30');
+  const sleep = t2m(S.sleepTime||'22:30');
+
+  function scheduled(){
+    return S.tasks.filter(t=>t.start&&t.end&&t2m(t.start)>=dayStart&&t2m(t.end)<=sleep)
+      .sort((a,b)=>t2m(a.start)-t2m(b.start));
+  }
+  function findGap(list){
+    let cursor=dayStart;
+    for(const t of list){
+      const s=t2m(t.start);
+      if(s-cursor>=dur) return cursor;
+      cursor=Math.max(cursor,t2m(t.end));
+    }
+    if(sleep-cursor>=dur) return cursor;
+    return null;
+  }
+
+  let list=scheduled();
+  let slot=findGap(list);
+  const log=[];
+  const backup=JSON.stringify(S.tasks);
+
+  if(slot===null){
+    // Muhim vazifalarni himoya qilamiz: prayer, medicine
+    const protectedCats=['prayer','medicine'];
+    const shrinkable=[...list]
+      .filter(t=>!protectedCats.includes(t.cat))
+      .sort((a,b)=>(PRIORITY[a.cat]||2)-(PRIORITY[b.cat]||2));
+    let need=dur;
+    for(const t of shrinkable){
+      if(need<=0) break;
+      const cur=t2m(t.end)-t2m(t.start);
+      const minKeep=Math.max(10, Math.ceil(cur*0.5));
+      const canShrink=cur-minKeep;
+      if(canShrink<=0) continue;
+      const take=Math.min(canShrink,need);
+      t.end=m2t(t2m(t.end)-take);
+      log.push(t.name+' (−'+take+'d)');
+      need-=take;
+    }
+    list=scheduled();
+    slot=findGap(list);
+    if(slot===null){
+      S.tasks=JSON.parse(backup);
+      alert('❌ Kun ('+m2t(dayStart)+'–'+m2t(sleep)+') ichida yetarli joy topilmadi.\nVazifani qisqaroq qiling yoki muhim boʻlmagan vazifalarni oʻchiring.');
+      return;
+    }
+  }
+
+  S.tasks.push({
+    id: Date.now(), name: name.trim(),
+    start: m2t(slot), end: m2t(slot+dur),
+    cat: 'other', note: '✨ Aqlli qo\'shildi',
+    done:false, autoChecked:false, deferred:false
+  });
+  persist(); renderSchedule();
+  toast('✨ '+name.trim()+' → '+m2t(slot)+'–'+m2t(slot+dur)+(log.length?' • '+log.length+' vazifa qisqardi':''));
+}
 </script>
 
 <!-- ═══ SETTINGS OVERLAY ═══ -->
 <div class="ov" id="settingsOv">
-  <div class="sheet" style="max-width:520px">
+  <div class="sheet" style="max-width:520px;position:relative;padding-top:14px">
     <div class="sh-hdl"></div>
-    <div class="sh-title">⚙️ Sozlamalar</div>
-    <div id="settingsContent" style="max-height:70vh;overflow-y:auto;padding-right:4px"></div>
-    <div class="sh-btns"><button class="bs" onclick="closeSettings()">Yopish</button></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 12px;position:sticky;top:0;background:var(--bg2);padding:6px 0;z-index:5">
+      <div class="sh-title" style="margin:0;font-size:17px;font-weight:800">⚙️ Sozlamalar</div>
+      <button onclick="closeSettings()" title="Yopish" aria-label="Yopish" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--bdr2);background:var(--glass-bg2);color:var(--tx);font-size:20px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>
+    </div>
+    <div id="settingsContent" style="max-height:65vh;overflow-y:auto;padding-right:4px"></div>
+    <div class="sh-btns" style="margin-top:14px"><button class="bs" onclick="closeSettings()" style="width:100%;background:var(--accent);color:#000;font-weight:700;padding:12px">✓ Yopish (avtomatik saqlanadi)</button></div>
   </div>
 </div>
 
@@ -2473,6 +2609,9 @@ function changeSecretFlow(){
 .st-swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .st-sw{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
 .st-sw.on{border-color:var(--tx)}
+body.no-anim *,body.no-anim *::before,body.no-anim *::after{animation-duration:0.001s!important;transition-duration:0.001s!important}
+.ib.smart-add{position:relative;overflow:hidden}
+.ib.smart-add::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.4),transparent 60%);pointer-events:none}
 </style>
 
 </body>
