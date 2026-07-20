@@ -2638,6 +2638,60 @@ body.no-anim *,body.no-anim *::before,body.no-anim *::after{animation-duration:0
 .ib.smart-add::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.4),transparent 60%);pointer-events:none}
 </style>
 
+<script>
+/* Chiqish oqimi — 5 soniyalik bekor qilish */
+function ktSignOutFlow(){
+  let sec=5, cancelled=false;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:Inter';
+  ov.innerHTML=`<div style="font-size:20px;font-weight:800;margin-bottom:8px">🚪 Chiqmoqda...</div>
+    <div style="font-size:14px;color:#aaa;margin-bottom:16px"><span id="ktSoSec">${sec}</span> soniyada chiqadi</div>
+    <button id="ktSoCancel" style="padding:14px 28px;background:#22c55e;color:#000;border:none;border-radius:12px;font-weight:700;cursor:pointer;font-size:15px">Bekor qilish</button>`;
+  document.body.appendChild(ov);
+  document.getElementById('ktSoCancel').onclick=()=>{cancelled=true; ov.remove();};
+  const iv=setInterval(()=>{
+    if(cancelled){clearInterval(iv);return;}
+    sec--; const s=document.getElementById('ktSoSec'); if(s) s.textContent=sec;
+    if(sec<=0){clearInterval(iv); if(!cancelled && window.ktCloud) ktCloud.signOut();}
+  },1000);
+}
+
+/* Active devices ro'yxatini yangilash */
+async function ktRefreshDevList(){
+  const box=document.getElementById('ktDevList'); if(!box||!window.ktCloud||!ktCloud.spaceId) return;
+  const devs=await ktCloud.listDevices();
+  if(!devs.length){box.innerHTML='Qurilma yoʻq';return;}
+  box.innerHTML=devs.map(d=>{
+    const last=new Date(d.last_seen); const now=new Date();
+    const diff=Math.round((now-last)/60000);
+    const seen=diff<1?'hozir':(diff<60?diff+' daq':Math.round(diff/60)+' soat');
+    const isMe=d.user_id===ktCloud.userId;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--glass-bg2);border-radius:10px;margin-bottom:6px">
+      <div>
+        <div style="color:var(--tx);font-weight:600;font-size:13px">${d.device_name||'Qurilma'}${d.is_master?' 🔑':''}${isMe?' <span style="color:var(--accent)">(bu qurilma)</span>':''}</div>
+        <div style="font-size:11px">Oxirgi: ${seen} oldin</div>
+      </div>
+      ${(!isMe && ktCloud.isMaster)?`<button onclick="if(confirm('Chiqarilsinmi?'))ktCloud.revokeDevice('${d.id}').then(ktRefreshDevList)" style="padding:6px 10px;background:var(--red);color:#fff;border:none;border-radius:8px;font-size:11px;cursor:pointer">Chiqarish</button>`:''}
+    </div>`;
+  }).join('');
+}
+
+/* openSettings ni wrap qilish */
+(function(){
+  const orig=window.openSettings;
+  if(typeof orig==='function'){
+    window.openSettings=function(){ orig.apply(this,arguments); setTimeout(ktRefreshDevList,200); };
+  }
+})();
+
+/* Cloud tayyor bo'lganda status yangilash */
+document.addEventListener('kt-cloud-ready', ()=>{
+  const s=document.getElementById('ktCloudStat'); if(s) s.textContent='✅ Ulangan';
+});
+</script>
+
+
+
 <script src="/kt-cloud.js"></script>
 </body>
 </html>
