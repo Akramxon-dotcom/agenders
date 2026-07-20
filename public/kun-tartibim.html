@@ -2337,6 +2337,21 @@ function renderSettings(){
       </div>
     </div>
 
+    <div class="st-sec"><h4>☁️ Bulut va qurilmalar</h4>
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">
+        Holat: <span id="ktCloudStat">${window.ktCloud&&window.ktCloud.ready?'✅ Ulangan':'⏳ Ulanmoqda...'}</span>
+        ${window.ktCloud&&window.ktCloud.isMaster?' · 🔑 <b>Asosiy qurilma</b>':' · 📱 Ikkinchi qurilma'}
+      </div>
+      <div class="st-btns" style="flex-wrap:wrap">
+        ${window.ktCloud&&window.ktCloud.isMaster
+          ? `<button onclick="ktCloud.openScanner()">📷 QR skaner (yangi qurilma ulash)</button>`
+          : `<button onclick="ktCloud.showJoinQR()">📱 QR koʻrsatish (ulanish)</button>`}
+        <button onclick="ktSignOutFlow()" style="background:var(--red);color:#fff">🚪 Chiqish</button>
+      </div>
+      <div id="ktDevList" style="margin-top:10px;font-size:12px;color:var(--tx2)">Qurilmalar yuklanmoqda...</div>
+    </div>
+
+
     <div class="st-sec"><h4>\ud83d\udd10 Xavfsizlik</h4>
       <div class="st-row"><span><b>Kirish qulfi (PIN)</b><br><span style="font-size:11px;color:var(--tx2)">Yoqilsa — har safar PIN soʻraladi</span></span>
         <input type="checkbox" ${!S.lockDisabled?'checked':''} onchange="S.lockDisabled=!this.checked;persist();applyVisibility();toast(this.checked?'\ud83d\udd12 PIN qulfi yoqildi':'\ud83d\udd13 PIN qulfi oʻchirildi')">
